@@ -188,6 +188,38 @@ The kerenels that have been shown until now all access the global memory or DRAM
 
 ### 5.1 Importance of Memory Access Efficiency
 
+![matmul Kernel with DRAM](imgs/image.png)
+
+The compute to global memory access (CGMA) ratio determines how close the kernel function can perform to the theoretical perfromance limit in terms of floating-point operations per second (flops). 
+
+In the code matmul function from chapter 4, the most important part is the loop, which contains two global memory accesses and one floateing-point addition per iteration. Thus the CGMA ration is at 1.0.
+### 5.2 CUDA Device Memory Types
+
+
+Simple information here. The memory hierarchy spans from global/constant memory which all threads can access to is bigger but has less bandwidth, to registers which each thread has its own. Registers are very small but have extremely high bandwidth.
+
+Table with keywords to specify scope (single thread, block or whole GPU) and lifetime (single kernel execution or whole application). 
+
+![CUDA Variable Type Qualifiers](img/image-1.png)
+ 
+### 5.3 A Strategy for Reducing Global Memory Traffic
+
+The first strategy is tiling. We have seen it before but now we have the tools to store it into shared (Block) or register memory, which is faster. 
+
+The second strategy is that threads collaborate on loading data into shared memory. They each load a different subset of that data but can all access this shared data. In the example the threads each store a partial solution and improve the result through phases. 
+
+The tiling algorithm presented can achieve Nx better performance if where N is Tile_width for NxN tiles. 
+
+# 5.4 Memory  as a limiting Factor to Parallelism
+It's important to remember that if we exceed the capacity of shared memory we end up with less threads per block.
+
+If we use all available 768 threads in a SM each thread has 10 registers. If we use 11 registers the amount of blocks will be reduced until the capacity is restored. 
+
+This is one of the factors that have to be adjusted depending on the GPU in question.
+
+### 5.5 Summary
+Everything from above and the fact that tiling is also effective in all types of parallel computing systems. Parallel algorithms need to perform _local_ data lookups in order to perform efficiently.
+
 ### 5.6 Exercises
 #### 5.6.1
 
@@ -203,5 +235,19 @@ Draw the equivalent of Figure 5.4 for an 8x8 matrix multiplication with 2x2 tili
 ### Solution
 Well that's gonna be difficult.
 
-### 5.6.3
-What type of incorrect execution behavior can happen if one forgets to use __syncthreads() function in the kernel of Figure 5.7? Note that there are two calls to __syncthreads(), each for a different purpose.
+## 6 Performance Considerations
+
+This chapter goes over all the bottlenecks that will help you optimize kernel functions.
+
+### 6.1 More on Thread Execution
+
+A block is partitioned into warps. If a block is not a multiple of 32 it is padded with more threads to complete a 32-thread warp.
+
+When we use if-then-else flows in our kernels the threads in a warp can diverge, if some follow the then path and others the else path. This means that they stop running in parallel. When the book was made this meant that first all then threads are executed and then all else threads. Now adays we will alternate between both flows with some threads at a time but use padding in the end. 
+
+Divergence can also happen in loops with varying numbers of iterations within a thread. 
+
+They showed an exmaple of a sum reduction kernel, where they showed that by reducing the divergence (in this example running a for loop the same amount of times with in a warp) they could increase performance.
+
+### 6.2 Global Memory Bandwith
+
