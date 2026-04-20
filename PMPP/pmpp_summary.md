@@ -251,3 +251,12 @@ They showed an exmaple of a sum reduction kernel, where they showed that by redu
 
 ### 6.2 Global Memory Bandwith
 
+This section explains memory coalescing which is used in conjunction with tiling to improve performance. 
+
+DRAM generally is slow but it can access memory that is close in parallel. This process is called coalescing and can be demonstrated with matrices. 
+
+Matrices in CUDA C are stored in row-major (Xd). This means that using tiling if threads iterate down a column they could coalesce the memory calls. They would load one row at a time which all lays in a small memory space. Iterating over columns would lead to far appart DRAM accesses and would not be coalesced.
+
+Coalescing works because weak capacitors can share the charge to the sensors.
+
+### 6.3 Dynamic Partitioning of SM Resources
