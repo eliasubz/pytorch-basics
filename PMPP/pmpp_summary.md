@@ -260,3 +260,46 @@ Matrices in CUDA C are stored in row-major (Xd). This means that using tiling if
 Coalescing works because weak capacitors can share the charge to the sensors.
 
 ### 6.3 Dynamic Partitioning of SM Resources
+
+An SM can have up to a fixed number of blocks. Therefore, its important to assign each block with enough threads so that the whole SM is utilized. The number of blocks per SM is determined during runtime. This can cause _performance cliffs_, if for example a SM is fully utilized and each thread uses its full amount of registers. If the kernel adds one scalar (automatic look 5.2) variable to each thread, which means one extra register,it would mean that there would be a whole number (1, 2,...) of blocks less in each SM. (Refer to CUDAs _Occupancy Calculator_ for more info)
+
+There could be also a benefit in adding an automatic variable which could help with memory and decrease the number of necessary idle warps to guarantee zero-overhead scheduling.  
+The added register use would have to to increase the number of indepenedent instructions in between global memory accesses. 
+
+### 6.4 Data Prefetching
+
+![Data prefetching](imgs/prefetching.png)
+As (cryptically) mentioned in the previous part, increasing the number of registers can improve the overall kernel efficiency. Prefetching increases the number of _independent instructions_. 
+The previous algorithm was doing two instructions in one line: global memory access into registers and moving stored data into shared memory. These two actions are seperated in the new algorithm, which reduces the amount of time each thread has to wait for the global memory access data. 
+
+You are encouraged to implement the first algorithm in ch_6/ yourself to use the data prefetch algorithm before looking at the solutions.
+
+### 6.5 Instruction Mix 
+
+Very interesting idea. When looking at the dot-product loop we can see that each iteration we incur a address arithmetic instructions. Given that we perform two floating-point calulations in each iteration, only two thirds of instructions bring us to the solution. 
+
+The resolution is to unrol the for-loop, which is only possible if the tile-size is known beforehand.
+
+NVCC **automatically** unrolls small loops nowadays. 
+
+### 6.6 Thread Granularity
+
+The idea is simple we can increase the number solutions each thread computes. The trade-off would be between more solutions, less global memory access and more registers in use -> potentially less blocks per SM. 
+
+For our dot-product example it would mean that since row_i is responsible for all out_ij (j e [0;N-1]), we could make the thread _less granular_ and reuse the tiled row_i for two out_ij for two different js. 
+
+### 6.7 MEASURED PERFORMANCE 67
+
+In the book they've experimented with all the techniques and showed that using all techniques makes the resources interact too much without the benefit of them all.
+
+Observations: 
+
+Below 16x16 tiling the techniques had virtually no effect because the bottleneck was purely due to the DRAM bandwith. 
+
+Increasing the thread granularity had a constant improving effect. Unrolling the loop had an average improving effect of 20% on the 16x16 tiling experiments. 
+
+![Measured Performance with various techniques](img/exp.png)
+
+### 6.8 Exercises
+#### 6.1
+The kernels in Figure 6.2 and 6.4 are wasteful in their use of threads; half of the threads in each block never execute. Modify the kernels to eliminate such waste. Give the relevant execute configuration parameter values at the kernel launch. Is there a cost in terms of extra arithmetic operation needed? Which resource limitation can be potentially addressed with such modification? Hints: Line 2 and/or Line 4 can be adjusted in each case, and the number of elements in the section may increase.
