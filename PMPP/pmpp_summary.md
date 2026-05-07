@@ -243,11 +243,11 @@ This chapter goes over all the bottlenecks that will help you optimize kernel fu
 
 A block is partitioned into warps. If a block is not a multiple of 32 it is padded with more threads to complete a 32-thread warp.
 
-When we use if-then-else flows in our kernels the threads in a warp can diverge, if some follow the then path and others the else path. This means that they stop running in parallel. When the book was made this meant that first all then threads are executed and then all else threads. Now adays we will alternate between both flows with some threads at a time but use padding in the end. 
+When we use if-then-else flows in our kernels the threads in a warp can diverge, which means that the threads of a wrap don't run in parallel anymore. Some threads follow the "if" path and others the "else" path in sequence. Now adays compilers minimize and restructure divergent paths, but nonetheless it's an issue to be kept in mind.
 
 Divergence can also happen in loops with varying numbers of iterations within a thread. 
 
-They showed an exmaple of a sum reduction kernel, where they showed that by reducing the divergence (in this example running a for loop the same amount of times with in a warp) they could increase performance.
+In the book a sum reduction kernel was illustrated, where reducing the divergence by using strides they could increase performance.
 
 ### 6.2 Global Memory Bandwith
 
