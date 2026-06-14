@@ -303,3 +303,23 @@ Increasing the thread granularity had a constant improving effect. Unrolling the
 ### 6.8 Exercises
 #### 6.1
 The kernels in Figure 6.2 and 6.4 are wasteful in their use of threads; half of the threads in each block never execute. Modify the kernels to eliminate such waste. Give the relevant execute configuration parameter values at the kernel launch. Is there a cost in terms of extra arithmetic operation needed? Which resource limitation can be potentially addressed with such modification? Hints: Line 2 and/or Line 4 can be adjusted in each case, and the number of elements in the section may increase.
+
+## 7 Floating Point Considerations
+This section talks about various effects that the accuracy of voting point operations has. 
+
+### 7.1 Floating Point Format
+
+The representation of floating points following the IEEE format have three components: a sign (S), a mantissa (M) and a exponent (E). 
+The formula is:
+
+\[ Value = (-1)^S \times 1.M \times 2^{E}\]
+
+
+
+The sign is very easily explained (-1)^0 is 1 and (-1)^1 is -1. 
+
+The mantissa needs different a forced range because otherwise numbers could have mutliple representations. That's called the _normalized represesentation_ of M.
+
+Honestly, reading _excess encoding_ has not equiped me to summarize this part. The exponent is there two increase the range of values. They encode the value in such a way that comparing smaller and bigger numbers is fast, because usigned comparators are faster in hardware implementation. (Don't listen to what I say just read an article about Excess Encoding)
+
+### 7.2 Representable Numbers
