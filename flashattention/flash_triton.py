@@ -165,5 +165,46 @@ def _self_attn_fwd(
         order=(1,0),
     )
 
-    
-    
+    kbatch_head_offset = batch * stride_kb + head * stride_kh
+    k_tile_ptr =tl.make_block_ptr(
+        base=Kt + kbatch_head_offset,
+        shape=(HEAD_DIM, T),
+        strides=(stride_kk, stride_kt),
+        offsets=(0, 0),
+        block_shape=(HEAD_DIM, TILE_K_SIZE),
+        order=(0,1),
+    )
+
+    # What is T
+    vbatch_head_offest = batch * stride_vb + head * stride_vh
+    v_tile_ptr = tl.make_block_ptr(
+        base = V + vbatch_head_offest,
+        shape = (T, HEAD_DIM),
+        strides = (stride_vt, stride_vk),
+        offsets=(0,0),
+        block_shape=(TILE_K_SIZE, HEAD_DIM),
+        order=(1,0),
+    )
+
+    # Why minus dtype minus infinity? and what is mi li, acc?
+    # acc is multiplied with alpha and .where
+    # m_i might be the minimum
+    m_i = tl.zeros([TILE_Q_SIZE], dtype=tl.float32) - float("inf")
+    l_i = tl.zeros([TILE_Q_SIZE], dtype=tl.float32)
+    acc = tl.zeros([TILE_Q_SIZE, HEAD_DIM], dtype=tl.float32)
+
+    q_tile_indices = q_token_idx + tl.arange(0, TILE_Q_SIZE)
+
+    q_tile = tl.load(
+        q_tile_ptr,
+        boundary_check=(0,),
+    )
+
+    softmax_scale: tl.constexpr = tl.cast(SM_SCALE * RCP_LN2, q_tile.dtype)
+    tile_k_arange = tl.arange(0, TILE_K_SIZE)
+
+    if PRESCALE:
+        q_tile *= softmax_scale
+
+    max_tile = tl.cdiv(seq_len, TILE_K_SIZE)
+
