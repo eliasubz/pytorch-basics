@@ -166,7 +166,7 @@ def _self_attn_fwd(
     )
 
     kbatch_head_offset = batch * stride_kb + head * stride_kh
-    k_tile_ptr =tl.make_block_ptr(
+    kt_tile_ptr =tl.make_block_ptr(
         base=Kt + kbatch_head_offset,
         shape=(HEAD_DIM, T),
         strides=(stride_kk, stride_kt),
@@ -206,5 +206,60 @@ def _self_attn_fwd(
     if PRESCALE:
         q_tile *= softmax_scale
 
+    # What is cdiv;maxtile = integer of size?
     max_tile = tl.cdiv(seq_len, TILE_K_SIZE)
+    # Iterate over each elem in max_tile
+    for kv_tile_idx in tl.range(
+        0, max_tile, num_stages=PIPELINING
+    ):
+        last_iter = kv_tile_idx == max_tile - 1 
+        # kv_token_idx
+        kv_token_idx = kv_tile_idx * TILE_K_SIZE
+
+        if last_iter: 
+            kt_tile = tl.load(
+                tl.advance(kt_tile_ptr, (0, kv_token_idx)),
+                boundary_check=(1,)
+            )
+        else:
+            kt_tile = tl.load(
+                tl.advance(kt_tile_ptr, (0, kv_token_idx)),
+            )
+        if V_PRELOAD:
+            if last_iter:
+                v_tile = tl.load(
+                    tl.advance(v_tile_ptr, (kv_token_idx, 0))
+                    boundary_check=(0,),
+                )
+            else: 
+                v_tile = tl.load(
+                    tl.advance(v_tile_ptr, (kv_token_idx, 0)),
+                )
+
+        # partial qk multipliacation I guess
+        qk = tl.dot(
+            q_tile, kt_tile, input_precision=INPUT_PRECISION, out_dtype=tl.float32
+        )
+
+        # So i guess online softmax is assumed, what is PRESCALE though
+        if not PRESCALE:
+            qk *= softmax_scale
+
+        if last_iter:
+            # So we add a range to a the index makes sense
+            kv_indices = kv_token_idx + tile_k_arange
+
+            mask = (
+                kv_indices[None, :] < seq_len
+            )
+
+            qk = tl.where(mask, qk, tl.cast(-float("inf"), qk.dtype))
+
+        # Now we get into the online softmax stuf forreal
+        m_ij = tl.maximum(m_i, tl.max(qk, 1))
+        p = tl.math.exp2(qk - m_ij[:, None])
+
+        
+            
+
 
