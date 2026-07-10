@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # https://accelerated-computing.academy/fall25/
 
+
 import time
 
 import jax
