@@ -245,6 +245,7 @@ def _self_attn_fwd(
         if not PRESCALE:
             qk *= softmax_scale
 
+        # adds mask to qks if last_iter
         if last_iter:
             # So we add a range to a the index makes sense
             kv_indices = kv_token_idx + tile_k_arange
@@ -256,10 +257,121 @@ def _self_attn_fwd(
             qk = tl.where(mask, qk, tl.cast(-float("inf"), qk.dtype))
 
         # Now we get into the online softmax stuf forreal
+        # Dont really understand what m_ij is with max(imum) logic unclear
         m_ij = tl.maximum(m_i, tl.max(qk, 1))
         p = tl.math.exp2(qk - m_ij[:, None])
 
-        
+        # Aligns with my basic understanding of online softm
+        l_ij = tl.sum(p,1)
+        alpha = tl.math.exp2(qk, m_ij[:, None])
+
+        if not V_PRELOAD:
+            if last_iter:
+                v_tile = tl.load(
+                    tl.advance(v_tile_ptr, (kv_token_idx, 0)),
+                    boundary_check=(0,),
+                )
+            else: 
+                v_tile = tl.load(
+                    tl.advance(v_tile_ptr, (kv_token_idx, 0)),
+                )
             
+        # Some type of accumulated form with online softmax included now  
+        acc = tl.dot(
+            p.to(v_tile.dtype),
+            v_tile, 
+            acc, 
+            input_precision=INPUT_PRECISION,
+            out_dtype=tl.float32
+        )
+        m_i = m_ij
+
+    # Final accumulated version
+    acc = acc / l_i[:, None]
+    # Real query mask instead of negative inf for softmax afaik
+    if need_q_mask:
+        q_lens_mask = (
+            q_tile_indices[:, None] < seq_len
+        )
+        acc.where(q_lens_mask, acc, 0.0)
+
+    # Lets go! the lines I get
+    obatch_head_offset = batch * stride_ob + head * stride_oh
+    o_tile_ptr = tl.make_block_ptr(
+        base=O+obatch_head_offset,
+        shape=(T,HEAD_DIM),
+        strides=(stride_ot, stride_ok),
+        offsets=(q_token_idx, 0),
+        block_shape=(TILE_Q_SIZE, HEAD_DIM),
+        order=(1,0),
+    )
+
+    # And Done
+    tl.store(
+        o_tile_ptr,
+        acc.to(o_tile_ptr.type.element_ty),
+        boundary_check=(0,),
+    )
+
+# Resumen: A lot of offsets, gotta look into preload, prescale,
+# online softmax logic and *t, *k strides because I dont understand all dimensions
+
+# What does kwargs["L"] stand for? what was resetonly planned for?
+def autotune_prehook(kwargs, reset_only=False):
+    if kwargs["L"] is not None:
+        kwargs["L"].add_(kwargs["q"].size(2))
 
 
+def autotune_posthook(kwargs, exception=None):
+    if kwargs["L"] is not None:
+        kwargs["L"].add_(-kwargs["q"].size(2))
+
+# We seem to add and subtract time from "L" ¿L?
+
+streaming_forward = triton.heuristics(
+    dict(
+        PIPELININ=lambda _:1,
+        TILE_Q_SIZE=lambda _:54,
+        TILE_K_SIZE=lambda _: 64,
+    )
+)(_self_attn_fwd)
+
+
+# Rest Copy and pasted from https://github.com/alexdremov/kernels/blob/main/src/self_attention/kernel.py
+streaming_forward_autotune = triton.autotune(
+    configs=[
+        triton.Config(
+            dict(
+                PIPELINING=pipe,
+                TILE_Q_SIZE=tile_q,
+                TILE_K_SIZE=tile_k,
+                V_PRELOAD=V_PRELOAD,
+            ),
+            num_warps=num_warps,
+            num_stages=pipe,
+        )
+        for num_warps in [4, 8]
+        for pipe in [1, 2]
+        for tile_q in [
+            2**i
+            for i in range(
+                int(math.log2(MIN_TILE_SIZE) + 0.1),
+                int(math.log2(MAX_TILE_SIZE) + 0.1) + 1,
+            )
+        ]
+        for tile_k in [
+            2**i
+            for i in range(
+                int(math.log2(MIN_TILE_SIZE) + 0.1),
+                int(math.log2(MAX_TILE_SIZE) + 0.1) + 1,
+            )
+        ]
+        for V_PRELOAD in (True, False)
+    ],
+    key=["HEAD_DIM", "INPUT_PRECISION", "TIME_BUCKET", "DTYPE"],
+    prune_configs_by=dict(early_config_prune=fwd_configs_pruner),
+    pre_hook=autotune_prehook,
+    post_hook=autotune_posthook,
+)(_self_attn_fwd)
+
+# Not bothering to write benchmarking logic
