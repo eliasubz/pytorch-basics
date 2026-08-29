@@ -1,16 +1,13 @@
-stack = []
-
-def next_greater(nums: list[int]) -> int:
-    # find the next greater elem for each item
+def next_greaters(nums: list[int]) -> int:
     n = len(nums)
     stack = []
-    result = [-1] * n
-
+    output = [-1] * n
     for i in range(n):
-        while stack and nums[i] > nums[stack[-1]]:
-            result[stack.pop()] = nums[i]
+        while stack and nums[stack[-1]] < nums[i]:
+            output[stack.pop()] = nums[i]
 
         stack.append(i)
-    return result
-
+    return output
+nums = [i for i in range(4)]
+print(next_greaters(nums))
 # wtf this is not intuitve at all
