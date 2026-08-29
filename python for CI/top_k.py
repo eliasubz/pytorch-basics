@@ -1,5 +1,6 @@
 import heapq
 
+# minheaps root is the (not strictly) smallest elem of arr
 # holds min heap of size three and checks if anything is bigger than the root of minheap
 # O(n*lok(3))
 def top_three_largest(nums: list[int]) -> list[int]:
@@ -16,4 +17,6 @@ def top_three_largest(nums: list[int]) -> list[int]:
             heapq.heapreplace(minheap, val)
 
     return sorted(minheap, reverse=True)
+
+# in reality np.array(nums); nums[np.argpartition(nums,len(nums)-k)][len(nums)-k] is faster
 
