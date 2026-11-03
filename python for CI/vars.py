@@ -81,7 +81,16 @@ print(arr)
 # strings
 s = "abc"
 print(s[0:2])
+
+print("   a   ".strip())
 s += "def"
+print(s[0:3])
+
+s[0], s[2] = s[2], s[0]
+
+if s[0] in s:
+    print("well duhu")
+
 
 print(int("123") + int("456"))
 print(str(123) + str(456))

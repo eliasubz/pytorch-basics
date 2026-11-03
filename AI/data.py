@@ -7,16 +7,16 @@ from tokenizers import Tokenizer
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 
 
-def load_data(name="imdb", tokenizer_name="deepseek-ai/DeepSeek-V4.1-Flash", limit=None, cache=True):
+def load_data(name="stanfordnlp/imdb", tokenizer_name="deepseek-ai/DeepSeek-V4.1-Flash", cache=True, limit=None):
     """Tokenize a text dataset into two flat streams of ids for causal LM training.
 
     Returns (tokenizer, train_ids, val_ids) where the ids are 1-D int64 tensors
-    holding every document concatenated together, separated by the eos token.
+    holding every document concatenated together, separated by fthe eos token.
     """
     tokenizer = Tokenizer.from_pretrained(tokenizer_name)
     eos_id = tokenizer.token_to_id("<|endoftext|>")
 
-    tag = f"{name}-{tokenizer_name}-{limit}".replace("/", "_")
+    tag = f"{name}-{tokenizer_name}".replace("/", "_")
     cache_path = os.path.join(CACHE_DIR, f"{tag}.pt")
     if cache and os.path.exists(cache_path):
         blob = torch.load(cache_path)
