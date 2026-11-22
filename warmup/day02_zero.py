@@ -58,7 +58,6 @@ def ring_all_gather(my_chunk: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
     r, w = dist.get_rank(), dist.get_world_size()
     left, right = (r-1) % w, (r+1) % w
     chunks = list(out.tensor_split(w))        # so this apparently gives views into out
-
     chunks[r].copy_(my_chunk)
 
     for i in range(w-1):
@@ -115,12 +114,13 @@ class ShardedSGD:
         my_grad = ring_reduce_scatter(flat_grad)    # total sum of all gradients for shard r
 
         # 2. sgd gradient step
-        # self.momentum_buf = self.mu * self.momentum_buf + my_grad
-        self.momentum_buf.mul_(self.mu).add_(my_grad)
+        self.momentum_buf = self.mu * self.momentum_buf + my_grad
 
         # 3. all-gather parameters
-        self.my_params_shard.sub_(self.lr * self.momentum_buf)
-        ring_all_gather(self.my_params_shard.clone(), self.all_params)
+        my_shard_buffer = self.my_params_shard.clone() - self.lr * self.momentum_buf
+        self.my_params_shard.copy_(my_shard_buffer)
+        ring_all_gather(self.my_params_shard, self.all_params)
+
 # Am meisten hat gedauer herauszufindend dass meine daten leer waren, weil N=1 keine gescheiten shards hinbekmen hat weil s = N//W = 0 war
     
 
