@@ -137,12 +137,7 @@ def gpipe_step(stage, x_mbs, y_mbs, shapes, n_global, lr):
     stage.W -= lr * stage.dW
     stage.dW.zero_()
 
-    return loss if stage.is_last else None
-
-    
-
-    
-            
+    return loss if stage.is_last else None     
             
     
     
